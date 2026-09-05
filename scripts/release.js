@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+'use strict';
+// ============================================================
+// Cut a release — the git tag is the version, and nothing else is
+//
+// The version lives in three JSON files. Kept in step by hand, with a git tag alongside that
+// nothing checks, they drift within the hour: a tag is pushed, one more commit lands on
+// `master`, and from then on every fresh install gets that later commit while still calling
+// itself the tagged version. Two people on "the same version" run different code.
+//
+// So: **the tag names the version, this script writes it everywhere, and it places the tag on
+// the commit that actually carries the built plugin.** The ordering is the whole point — a tag
+// created BEFORE the release commit points at code that is not what shipped.
+//
+//   node scripts/release.js            # re-cut the latest existing tag
+//   node scripts/release.js v0.2.0     # cut a new one
+//
+// It stops rather than guesses: a dirty tree, a malformed tag, a tag already on the remote.
+// ============================================================
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const ROOT = path.join(__dirname, '..');
+const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8' }).trim();
+
+/** Ask git a question that may have no answer, without letting it print `fatal:` at the user. */
+const gitQuiet = (...args) => {
+  try {
+    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return null;
+  }
+};
+
+function die(msg, fix) {
+  console.error(`✗ ${msg}`);
+  if (fix) console.error(`  ${fix}`);
+  process.exit(1);
+}
+
+// ── which tag ───────────────────────────────────────────────────────────────
+let tag = process.argv[2];
+if (!tag) {
+  tag = gitQuiet('describe', '--tags', '--abbrev=0', '--match', 'v*');
+  if (!tag) die('no `v*` tag in this repository, and none given', 'node scripts/release.js v0.1.0');
+  console.log(`· no tag given — re-cutting the latest, ${tag}`);
+}
+if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+  die(`\`${tag}\` is not a version tag`, 'expected vMAJOR.MINOR.PATCH, e.g. v0.2.0');
+}
+const version = tag.slice(1);
+
+// ── refuse to release a tree nobody can reproduce ───────────────────────────
+if (git('status', '--porcelain')) {
+  die('the working tree has uncommitted changes',
+      'commit or stash them — a release must name a commit that exists');
+}
+
+// ⚠️ A tag already on the remote cannot be moved without rewriting what other people fetched.
+// Better to say so than to force-push somebody else's reference point out from under them.
+const remoteRef = gitQuiet('ls-remote', '--tags', 'origin', `refs/tags/${tag}`);
+const onRemote = Boolean(remoteRef);
+
+// ── write the version everywhere it is read ─────────────────────────────────
+const FILES = [
+  ['package.json', (j) => { j.version = version; }],
+  ['plugin/.claude-plugin/plugin.json', (j) => { j.version = version; }],
+  ['.claude-plugin/marketplace.json', (j) => {
+    const entry = j.plugins.find((p) => p.name === 'ds');
+    if (!entry) die('marketplace.json lists no plugin called `ds`');
+    entry.version = version;
+  }],
+  // ⚠️ The lockfile carries the version TWICE, and npm rewrites both from `package.json` on the
+  // next `npm install` — so a release that skips it leaves a file in git that disagrees with
+  // every other version source until some contributor's unrelated install silently corrects it.
+  // It was found holding `0.3.3` while everything else said `0.1.0`.
+  ['package-lock.json', (j) => {
+    j.version = version;
+    if (j.packages && j.packages['']) j.packages[''].version = version;
+  }],
+];
+
+const touched = [];
+for (const [rel, set] of FILES) {
+  const file = path.join(ROOT, rel);
+  const before = fs.readFileSync(file, 'utf-8');
+  const json = JSON.parse(before);
+  set(json);
+  const after = JSON.stringify(json, null, 2) + '\n';
+  if (after !== before) {
+    fs.writeFileSync(file, after, 'utf-8');
+    touched.push(rel);
+  }
+}
+console.log(touched.length ? `✓ version ${version} → ${touched.join(', ')}` : `· already at ${version}`);
+
+// ── build and prove it ──────────────────────────────────────────────────────
+// `build:plugin` re-checks that the three files agree, so a bug above cannot slip past.
+const run = (cmd, args) => execFileSync(cmd, args, { cwd: ROOT, stdio: 'inherit' });
+run('npm', ['run', 'build:plugin']);
+run('npm', ['test']);
+
+// ── one commit, and the tag ON it ───────────────────────────────────────────
+if (git('status', '--porcelain')) {
+  run('git', ['add', '-A']);
+  run('git', ['commit', '-m', `Release ${tag}`]);
+  console.log(`✓ committed ${git('rev-parse', '--short', 'HEAD')}`);
+}
+
+const head = git('rev-parse', 'HEAD');
+const tagged = gitQuiet('rev-parse', `${tag}^{commit}`);
+
+if (tagged === head) {
+  console.log(`✓ ${tag} already points at HEAD`);
+} else if (tagged && onRemote) {
+  die(`${tag} is already on origin, pointing at ${tagged.slice(0, 7)}, but this release is ${head.slice(0, 7)}`,
+      `moving a published tag rewrites what others have fetched. Cut a new version instead.`);
+} else {
+  run('git', ['tag', '-f', '-a', tag, '-m', `DSpec ${version}`]);
+  console.log(`✓ ${tag} → ${head.slice(0, 7)}`);
+}
+
+// ⚠️ Publishing the GitHub Release is a SEPARATE step, and comes after the push. A Release
+// cannot be created for a tag the remote does not have — `gh` would otherwise create that tag
+// itself, from whatever the default branch points at, and the Release would describe a commit
+// nobody released. This script must not push, so it cannot publish either; it names the step
+// instead. `publish-release.js` is idempotent, so a forgotten one can be run later.
+console.log(`\nPush it, then publish the release:
+  git push origin master && git push origin ${tag}
+  node scripts/publish-release.js ${tag}`);

@@ -1,0 +1,42 @@
+name: CI
+
+# ⚠️ `master`, not `main`. This said `main` — a branch that has never existed here — so the
+# push trigger never fired once and CI was green by never running.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    name: Node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # Covers the plugin too: `plugin-build.test.js` re-renders `dist-plugin/` and fails when
+      # the committed copy differs, which is the one mistake that ships stale text to every user.
+      - run: npm test
+
+  plugin:
+    runs-on: ubuntu-latest
+    name: Plugin manifest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      # The same validation the community-marketplace review pipeline runs. Catching a malformed
+      # manifest here beats catching it after a user has already failed to install.
+      - run: npx --yes @anthropic-ai/claude-code plugin validate ./dist-plugin
+      - run: npx --yes @anthropic-ai/claude-code plugin validate .

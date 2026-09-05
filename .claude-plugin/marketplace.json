@@ -1,0 +1,23 @@
+{
+  "name": "ds",
+  "owner": {
+    "name": "tuna",
+    "email": "tuandv.job@gmail.com"
+  },
+  "description": "DSpec — spec-driven development for Claude Code. A persistent product model in your repo, bound to real symbols and measured, so what Claude knows about your codebase can be checked instead of trusted.",
+  "plugins": [
+    {
+      "name": "ds",
+      "source": "./dist-plugin",
+      "version": "1.0.0",
+      "description": "Spec-driven development for Claude Code. The product model lives as markdown in your repo, binds to real symbols, and ds check fails when the two disagree. No server, no token, no network.",
+      "keywords": [
+        "specs",
+        "spec-driven",
+        "code-map",
+        "drift",
+        "local"
+      ]
+    }
+  ]
+}

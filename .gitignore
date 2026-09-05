@@ -1,0 +1,34 @@
+node_modules/
+# ⚠️ ANCHORED. A bare `dist/` matches a directory of that name at ANY depth, which silently
+# swallowed `dist-plugin/dist/` — the compiled CLI that ships inside the plugin. The plugin
+# would have installed with no CLI at all, and nothing would have said so.
+/dist/
+*.tsbuildinfo
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / test output
+*.tgz
+coverage/
+*.log
+
+# Local environment
+.env
+.env.*
+
+# ⚠️ `dist-plugin/` is BUILD OUTPUT that is COMMITTED on purpose. Claude Code installs a plugin
+# by fetching this repository; there is no build step on the way in, so anything not committed
+# does not exist for the user. `npm run build:plugin` regenerates it, and `plugin-build.test.js`
+# fails if what is committed differs from what the templates produce.
+# ⚠️ `CLAUDE.md` is COMMITTED. It is rendered from `.ds/` by `ds sync --write`, and `ds check`
+# verifies it against the model — so a clone without it reports a missing artifact, and a teammate
+# gets no pointer at the index. Never edit it by hand; regenerate it.
+.ds/config.json
+CLAUDE.local.md

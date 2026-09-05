@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "ds": {
+      "source": {
+        "source": "github",
+        "repo": "tuna781/dspec"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ds@ds": true
+  }
+}

@@ -1,0 +1,267 @@
+"use strict";
+// ============================================================
+// "What does the model already know about this?"
+//
+// ⚠️ **A LOOKUP, not a search.** Matching a request against every element name by word
+// overlap produced the failure this whole module is shaped around: asked about *"fingerprint the code
+// and report drift"*, it matched the word "Report" — a private helper in an unrelated file —
+// returned that file as the code map, and then told the agent that everything else was
+// unaffected. A false scope, asserted as authority.
+//
+// So this resolves a NAME. `resolve` is that lookup and nothing else, and what it returns is the
+// only thing allowed into the Code Map.
+//
+// ⚠️ **`suggest` exists, and it is not the same thing.** Agent requests arrive as free text — a PR
+// title, a failing command, a review comment — and almost never carry a feature's name, so a
+// name-only lookup answers "I do not know" far more often than it needs to. `suggest` ranks
+// features by words shared with the request, and the ranking is a GUESS.
+//
+// The line between them is the whole design, and it is a placement rule, not a scoring one:
+//
+//   `resolve` → the Code Map → "files not listed here are unaffected"   ← asserted as scope
+//   `suggest` → "decide, do not assume" → nothing, until a human picks  ← asserted as nothing
+//
+// A weak match printed under a heading that calls it weak is not a false scope; a weak match
+// promoted into the Code Map is exactly the failure above. Word overlap is only dangerous when it
+// is allowed to speak with authority, so it is never given any.
+// ============================================================
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolve = resolve;
+exports.suggest = suggest;
+exports.closure = closure;
+exports.renderPack = renderPack;
+const types_1 = require("../model/types");
+const staleness_1 = require("../code/staleness");
+const lint_1 = require("./lint");
+const load_1 = require("../model/load");
+/**
+ * Resolve a request to features.
+ *
+ * Two tiers, both exact: the request IS a feature name, or a feature's whole name occurs inside
+ * it on word boundaries. Nothing weaker. A name occurring inside a sentence is a statement the
+ * writer made; an overlapping token is a coincidence the tool would be inventing meaning from.
+ */
+function resolve(model, request, opts = {}) {
+    const hits = [];
+    const unresolved = [];
+    const add = (f) => { if (!hits.includes(f))
+        hits.push(f); };
+    for (const name of opts.touch ?? []) {
+        const f = (0, types_1.findFeature)(model, name);
+        if (f)
+            add(f);
+        else
+            unresolved.push(name);
+    }
+    const exact = (0, types_1.findFeature)(model, request);
+    if (exact)
+        add(exact);
+    else {
+        const hay = ` ${(0, types_1.normName)(request)} `;
+        for (const f of model.features) {
+            // Word boundaries, so `Drift detection` does not match inside a longer word, and a
+            // one-word feature name cannot match a fragment of an unrelated one.
+            if (new RegExp(`(^|[^\\p{L}\\p{N}])${escape((0, types_1.normName)(f.name))}([^\\p{L}\\p{N}]|$)`, 'u').test(hay))
+                add(f);
+        }
+    }
+    return { hits, unresolved };
+}
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Words too common to carry meaning.
+ *
+ * Deliberately short. An aggressive list starts dropping real domain words, and a missed
+ * suggestion is worse than a noisy one here — the noisy one is visible under a heading telling you
+ * to judge it, and the missed one is not there to be judged at all.
+ */
+const STOPWORDS = new Set([
+    'the', 'a', 'an', 'and', 'or', 'of', 'for', 'to', 'in', 'on', 'with', 'by', 'from', 'is', 'are',
+    'be', 'do', 'does', 'how', 'what', 'which', 'when', 'why', 'we', 'i', 'my', 'it', 'its', 'this',
+    'that', 'add', 'new', 'change', 'update', 'make', 'fix', 'support', 'allow', 'let', 'want',
+    'need', 'should', 'can', 'not', 'after', 'before', 'into', 'out', 'up', 'too', 'file', 'files',
+]);
+/** Crude suffix stripping — enough that `renders`/`rendered`/`rendering` meet at `render`. */
+const stem = (w) => w.replace(/(ing|ed|es|s)$/, '');
+function terms(text) {
+    return [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u)
+            .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+            .map(stem))];
+}
+/**
+ * Rank features by words shared with the request. **A guess, and labelled as one everywhere it is
+ * rendered.**
+ *
+ * ⚠️ **A name hit outweighs a body hit**, because the two are not equal evidence: a word in the
+ * feature's own name is what somebody chose to call it, while a word in a paragraph may be an
+ * aside. Without the weighting, a long body full of incidental vocabulary outranks the feature the
+ * request is actually about — which is how a search that "works" starts recommending whichever
+ * feature happens to be the most verbose.
+ */
+function suggest(model, request, exclude = []) {
+    const wanted = terms(request);
+    if (!wanted.length)
+        return [];
+    const out = [];
+    for (const f of model.features) {
+        if (exclude.includes(f))
+            continue;
+        // `code:` is included on purpose: "the YAML parser rejects my file" should reach the feature
+        // that owns `yaml.ts` even when its prose never says the word.
+        const name = stem(`${f.name} ${f.area}`.toLowerCase());
+        const body = stem(`${f.lead} ${f.rules.join(' ')} ${f.behaviour.join(' ')} ${f.code.join(' ')}`.toLowerCase());
+        const shared = [];
+        let score = 0;
+        for (const w of wanted) {
+            if (name.includes(w)) {
+                score += 3;
+                shared.push(w);
+            }
+            else if (body.includes(w)) {
+                score += 1;
+                shared.push(w);
+            }
+        }
+        if (score > 0)
+            out.push({ feature: f, shared, score });
+    }
+    // Ties broken by name, so the same request always produces the same listing — a suggestion that
+    // reorders between runs is one nobody can discuss.
+    return out.sort((a, b) => b.score - a.score || a.feature.name.localeCompare(b.feature.name)).slice(0, 5);
+}
+/** The depth-1 closure: the features named, plus everything they use. */
+function closure(model, seeds) {
+    const used = [];
+    for (const s of seeds) {
+        for (const name of s.uses) {
+            const f = (0, types_1.findFeature)(model, name);
+            if (f && !seeds.includes(f) && !used.includes(f))
+                used.push(f);
+        }
+    }
+    return { seeds, used };
+}
+function renderFeature(f, heading) {
+    const out = [`### ${heading}: ${f.name}`, ''];
+    if (f.area)
+        out.push(`_Area: ${f.area}_`, '');
+    out.push(`**Files:** ${f.code.map((c) => `\`${c}\``).join(', ')}`);
+    if (f.entry)
+        out.push(`**Start at:** \`${f.entry}\``);
+    if (f.uses.length)
+        out.push(`**Uses:** ${f.uses.join(', ')}`);
+    if (f.tests.length)
+        out.push(`**Proven by:** ${f.tests.map((t) => `\`${t}\``).join(', ')}`);
+    out.push('');
+    if (f.body.trim())
+        out.push(f.body.trim(), '');
+    return out;
+}
+/**
+ * The warning block.
+ *
+ * ⚠️ It comes BEFORE the rules it qualifies, because a reliability warning read after the content
+ * it applies to has already failed to do its job. The closing sentence is not removable: an agent
+ * that reads "no warnings" as "everything here is current" has been misled by omission.
+ */
+function renderWarnings(features, stale, model) {
+    const names = new Set(features.map((f) => f.name));
+    const rows = [];
+    for (const s of stale) {
+        if (!names.has(s.feature))
+            continue;
+        rows.push(`- **${s.feature}** — ${staleness_1.STALE_LABEL[s.kind]}: ${s.detail}`);
+    }
+    for (const f of (0, lint_1.lintModel)(model)) {
+        if (f.code !== 'no_body' || !f.feature || !names.has(f.feature))
+            continue;
+        rows.push(`- **${f.feature}** — ${f.detail}`);
+    }
+    if (!rows.length)
+        return [];
+    return [
+        '## ⚠ Unreliable in this task',
+        '',
+        rows.length === 1
+            ? '_One feature here is incomplete or unproven._'
+            : `_${rows.length} features here are incomplete or unproven._`,
+        '',
+        '**Ask before inferring their behaviour. Do not fill the gaps from the code, from naming,',
+        'or from convention — that guess is exactly what this document exists to prevent.**',
+        '',
+        '_These warnings reflect the last scan. The absence of a warning is not evidence that a',
+        'description is current._',
+        '',
+        ...rows,
+        '',
+    ];
+}
+/** The index, printed when the request names nothing — the answer to "then what ARE the options". */
+function renderIndexListing(model) {
+    const out = [];
+    for (const [area, features] of [...(0, types_1.byArea)(model.features).entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        out.push(`**${area || 'No area'}**`);
+        for (const f of features)
+            out.push(`- ${f.name}${(0, types_1.summaryOf)(f) ? ` — ${(0, types_1.summaryOf)(f)}` : ''}`);
+        out.push('');
+    }
+    return out;
+}
+function renderPack(repo, model, request, opts = {}) {
+    const { hits, unresolved } = resolve(model, request, opts);
+    const lines = [
+        `# Context Pack — ${request}`,
+        '',
+        `> What the model at \`${load_1.SPEC_DIR}/\` knows about **${request}**, for **${model.product.name}**.`,
+        '> Nothing here has changed; this is the ground you are building on.',
+        '',
+    ];
+    if (unresolved.length) {
+        lines.push('## Seeds that did not resolve', '', ...unresolved.map((n) => `- \`${n}\` — no feature by that name`), '');
+    }
+    if (!hits.length) {
+        lines.push('## The model does not name this', '', '**No feature matches this request by name**, so there is no Code Map below and nothing here', 'is scope. Either the work is genuinely new, or it is described under a name this request did', 'not use.', '');
+        const guesses = suggest(model, request);
+        if (guesses.length) {
+            lines.push('## Possibly related — decide, do not assume', '', '_Ranked by words these features share with your request. **A shared word is a coincidence', 'until you have judged it**, so none of this is a code map and none of it is scope. Read the', 'one that looks right and re-run by name:_ `ds spec "<Feature>"`.', '');
+            for (const g of guesses) {
+                const why = `shares ${g.shared.map((w) => `"${w}"`).join(', ')}`;
+                lines.push(`- **${g.feature.name}** — ${(0, types_1.summaryOf)(g.feature)}`);
+                lines.push(`  ${why} · ${g.feature.code.map((c) => `\`${c}\``).join(', ')}`);
+            }
+            lines.push('');
+        }
+        // ⚠️ The complete listing stays, and stays BELOW the guesses. The ranking is a guess; this is
+        // the truth, and a reader who distrusts the guess must not have to ask for the alternative.
+        lines.push(guesses.length
+            ? '### …or pick from every feature in the model'
+            : '### Every feature in the model', '', ...renderIndexListing(model), `Nothing matching? Ask the user where this belongs before assuming the work is new — and read`, `\`${load_1.SPEC_DIR}/${load_1.INDEX_FILE}\` for the same list at any time.`, '');
+        return lines.join('\n').replace(/\n+$/, '\n');
+    }
+    const { seeds, used } = closure(model, hits);
+    const inScope = [...seeds, ...used];
+    const stale = (0, staleness_1.computeStaleness)(repo, model);
+    lines.push(...renderWarnings(inScope, stale, model));
+    if (model.product.rules.length) {
+        lines.push('## Product rules', '', '_They apply to every change._', '', ...model.product.rules, '');
+    }
+    lines.push('## Code Map', '', '_The files bound to this task. Modify only what the task requires; read the rest for context._', '_**Files not listed here are unaffected — do not modify them.**_', '');
+    const files = new Set();
+    for (const f of inScope)
+        for (const c of f.code)
+            files.add(c);
+    for (const c of [...files].sort())
+        lines.push(`- \`${c}\``);
+    lines.push('');
+    lines.push('## The feature', ...['']);
+    for (const f of seeds)
+        lines.push(...renderFeature(f, 'Feature'));
+    if (used.length) {
+        lines.push('## What it uses', '', '_One hop out. These are declared dependencies, not guesses — changing one changes this._', '');
+        for (const f of used)
+            lines.push(...renderFeature(f, 'Uses'));
+    }
+    lines.push('---', '', `_Generated by dspec. Features not listed above are unaffected by this task._`, '');
+    return lines.join('\n').replace(/\n+$/, '\n');
+}
+//# sourceMappingURL=pack.js.map

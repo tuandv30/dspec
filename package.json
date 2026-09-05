@@ -1,0 +1,47 @@
+{
+  "name": "ds",
+  "version": "1.0.0",
+  "description": "Spec-driven development for Claude Code, distributed as a Claude Code plugin. The product model lives as markdown in your repo, bound to the code and measured.",
+  "keywords": [
+    "ds",
+    "dspec",
+    "specs",
+    "spec-driven",
+    "spec-driven-development",
+    "code-map",
+    "claude-code",
+    "claude-code-plugin",
+    "agents",
+    "local",
+    "cli"
+  ],
+  "homepage": "https://github.com/tuna781/dspec#readme",
+  "bugs": {
+    "url": "https://github.com/tuna781/dspec/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuna781/dspec.git"
+  },
+  "author": "tuna <tuandv.job@gmail.com>",
+  "license": "MIT",
+  "bin": {
+    "ds": "./bin/ds.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "clean": "rm -rf dist dist-plugin",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "test": "tsc && node --test test/*/*.test.js",
+    "build:plugin": "npm run build && node scripts/build-plugin.js",
+    "release": "node scripts/release.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "private": true
+}
