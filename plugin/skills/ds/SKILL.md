@@ -60,7 +60,11 @@ whole name occurring in your request. It never guesses from overlapping words, s
 - **A suggestion is a guess with no scope attached.** It tells you which words it matched so you
   can judge it. Confirm it is the feature, then re-run by name — never plan against a suggestion,
   and never treat its files as a code map.
-- `--touch "<Feature>"` pulls one in by name when you already know it belongs.
+- **Under *"What it uses"* each dependency is a CONTRACT**, not the whole feature: what it
+  promises and the rules it holds you to, without how it works. Its rules bind you the same as the
+  feature's own — the rule a change breaks is often a dependency's.
+- `--touch "<Feature>"` pulls one in by name when you already know it belongs, and is also how you
+  turn a contract back into the full description when you genuinely need the inside.
 
 ## Slash commands
 

@@ -5,7 +5,7 @@ code: [src/compile/pack.ts, src/cli/commands/spec.ts]
 entry: renderPack
 uses: [Model loading, Spec quality lint, Drift detection]
 tests: [test/render/pack.test.js]
-stamp: sha256f:a26d2546828194b7
+stamp: sha256f:493d516032935379
 ---
 
 How a piece of work reaches the model: given a request, assemble what the model already knows — the
@@ -25,6 +25,10 @@ Rules
   only dangerous when it is allowed to speak with authority, so it is never given any.
 - **The complete listing always survives, and sits below the guesses.** The ranking is a guess; the
   full list is the truth, and a reader who distrusts the guess must not have to ask for it.
+- **A dependency's RULES are never trimmed away.** The pack exists partly to surface the rule a
+  request contradicts, and that rule is often a dependency's. Trimming to make the pack smaller
+  must not hide the thing it is here to show — the same failure as a warning that switches off when
+  it is needed. Behaviour describes the inside, and the inside belongs to that feature's own pack.
 - **A resolved request gets no guesses.** Printing them beside a real code map would blur the one
   line the module exists to hold.
 - **The warning block comes before the rules it qualifies.** A reliability warning read after the
@@ -43,5 +47,13 @@ Behaviour
 - `code:` paths are searchable, so a filename in the request reaches the feature that owns it even
   when its prose never says the word.
 - The closure is depth 1 over `uses:` — declared dependencies, so it cannot silently miss one.
+- A **seed** is rendered whole; a **dependency** is rendered as a contract — name, files, entry,
+  lead and rules, then the command that fetches the rest. Measured on this repo, the closure was
+  58% of the pack: every dependency at the same fidelity as the feature being worked on, which is
+  the wrong thing to spend a context window on.
+- Nothing is unreachable: `--touch` promotes a dependency to a seed and renders it whole, and each
+  contract names that command rather than leaving the reader to remember it.
+- Trimming prose is not a scope change — the Code Map still spans seeds and dependencies alike, so
+  "files not listed here are unaffected" keeps meaning what it says.
 - `--touch` seeds a feature by name and always wins outright over what the request resolved to; a
   seed that resolves to nothing is reported, never dropped.

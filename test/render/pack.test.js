@@ -132,3 +132,62 @@ test('suggestions are deterministic', () => {
   const b = suggest(model(), 'coupon order total').map((s) => s.feature.name);
   assert.deepStrictEqual(a, b);
 });
+
+// ─── a dependency is a contract ─────────────────────────────────────────────
+//
+// ⚠️ The depth-1 closure was measured at **58% of the pack** on this repo's own model — every
+// dependency rendered at the same fidelity as the feature being worked on. A dependency is read
+// to find out what it promises. What every test below defends is where that line falls: the
+// promise and its rules stay, the internals go, and nothing becomes unreachable.
+
+/** `Apply discount` with a behaviour line, which the shared fixture leaves empty. */
+function withDependencyBehaviour() {
+  const m = model();
+  const dep = m.features[1];
+  dep.behaviour = ['- Refuses silently on an order already paid.'];
+  dep.body = `${dep.lead}\n\nRules\n${dep.rules.join('\n')}\n\nBehaviour\n${dep.behaviour.join('\n')}`;
+  return m;
+}
+
+test("a dependency's RULES survive — the rule you break is often not your feature's", () => {
+  const out = renderPack(REPO, model(), 'Place order');
+  assert.match(out, /Only one coupon may be applied to an order/);
+});
+
+test("a dependency's behaviour does NOT — how it works is its own pack's job", () => {
+  const out = renderPack(REPO, withDependencyBehaviour(), 'Place order');
+  const uses = out.slice(out.indexOf('## What it uses'));
+  assert.ok(!uses.includes('Refuses silently on an order already paid'), 'the inside is not this reader\'s problem');
+  assert.match(uses, /Only one coupon/, 'and the rules are still there');
+});
+
+test('a contract still says which files are its own', () => {
+  // The Code Map is flat, so this is the only thing mapping a path back to the dependency.
+  const uses = renderPack(REPO, model(), 'Place order').slice(0, 0)
+    + renderPack(REPO, model(), 'Place order').split('## What it uses')[1];
+  assert.match(uses, /src\/billing\/discount\.ts/);
+  assert.match(uses, /applyDiscount/, 'the entry point is where reading starts');
+});
+
+test('a contract names the way out of itself', () => {
+  const out = renderPack(REPO, model(), 'Place order');
+  assert.match(out, /--touch "Apply discount"/, 'nothing may be unreachable without saying how');
+});
+
+test('the SEED is still rendered in full — the trim is for dependencies only', () => {
+  const out = renderPack(REPO, model(), 'Place order');
+  const seed = out.slice(out.indexOf('## The feature'), out.indexOf('## What it uses'));
+  assert.match(seed, /Refuses an empty cart/, 'the feature being worked on keeps its behaviour');
+});
+
+test('--touch promotes a dependency back to a full feature', () => {
+  const out = renderPack(REPO, withDependencyBehaviour(), 'Place order', { touch: ['Apply discount'] });
+  assert.match(out, /Refuses silently on an order already paid/, 'the escape hatch has to actually open');
+  assert.ok(!out.includes('## What it uses'), 'promoted to a seed, it is no longer a dependency');
+});
+
+test('trimming prose is NOT a scope change — the code map is untouched', () => {
+  const out = renderPack(REPO, model(), 'Place order');
+  const map = out.slice(out.indexOf('## Code Map'), out.indexOf('## The feature'));
+  assert.match(map, /src\/billing\/discount\.ts/, '"files not listed are unaffected" must keep meaning it');
+});

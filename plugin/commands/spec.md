@@ -22,20 +22,24 @@ already says — for them to read and correct **before any code exists**.
    treat its file list as a code map. If none of them is it, **ask the user where this belongs**
    rather than deciding the work is new.
 
-3. **If it opens with a ⚠ Unreliable block, ask about those features first.** They are
+3. **Dependencies arrive as contracts.** Under *"What it uses"* you get what each one promises and
+   the rules it holds you to — not how it works. Those rules bind your change exactly as the
+   feature's own do. Need the inside of one? `--touch "<Feature>"` renders it whole.
+
+4. **If it opens with a ⚠ Unreliable block, ask about those features first.** They are
    unwritten, unproven, or older than their code. Do not fill the gap from the code, from naming,
    or from convention — that guess is the thing this whole system exists to prevent.
 
-4. **Write the description in the model's own vocabulary.** Use the names `.ds/glossary.md` and the
+5. **Write the description in the model's own vocabulary.** Use the names `.ds/glossary.md` and the
    feature files already use; do not invent a second word for something that has one.
 
-5. **State every conflict outright.** If the request contradicts a rule in `.ds/product.md` or in
+6. **State every conflict outright.** If the request contradicts a rule in `.ds/product.md` or in
    the feature's own `Rules`, quote the rule, name where it lives, and say that one of the two has
    to win — **and that this is the user's call, not yours.**
 
-6. **Say what the model does not settle.** Where it is silent, write *"the model does not settle
+7. **Say what the model does not settle.** Where it is silent, write *"the model does not settle
    this"* rather than filling it in. A description that sounds equally confident everywhere is one
    the user cannot calibrate against.
 
-7. Show it to the user and invite corrections. **Stop there.** When they are happy,
+8. Show it to the user and invite corrections. **Stop there.** When they are happy,
    `__DS_CMD_PLAN__` turns it into a plan and builds it.

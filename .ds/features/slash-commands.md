@@ -12,7 +12,7 @@ code:
   - plugin/.claude-plugin/plugin.json
 uses: [Body vocabulary]
 tests: [test/contract/invariants.test.js]
-stamp: sha256f:af83978c20eabb1d
+stamp: sha256f:bc313b4c4109fb05
 ---
 
 The prose that reaches the user's agent: six commands and one skill. **This is the product's real
