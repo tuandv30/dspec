@@ -9,7 +9,7 @@
     {
       "name": "ds",
       "source": "./dist-plugin",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Spec-driven development for Claude Code. The product model lives as markdown in your repo, binds to real symbols, and ds check fails when the two disagree. No server, no token, no network.",
       "keywords": [
         "specs",

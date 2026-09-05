@@ -1,6 +1,6 @@
 {
   "name": "ds",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Spec-driven development for Claude Code. The product model lives as markdown in the repo; every session opens knowing what it owes, editing a file surfaces the spec bound to it, and leaving with the code map stale gets one reminder. The CLI ships inside this plugin — no npm, no server, no token, no network.",
   "keywords": [
     "dspec",
