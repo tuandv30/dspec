@@ -55,10 +55,36 @@ exports.declarePlugin = declarePlugin;
 exports.readDeclaration = readDeclaration;
 const fs = __importStar(require("node:fs"));
 const path = __importStar(require("node:path"));
-/** Where the marketplace is fetched from. The repo that holds `.claude-plugin/marketplace.json`. */
-exports.MARKETPLACE = { name: 'ds', repo: 'tuna781/dspec' };
+/**
+ * Where the marketplace is fetched from. The repo that holds `.claude-plugin/marketplace.json`.
+ *
+ * ⚠️ **`ref` is a RELEASE CHANNEL, not a version.** Without it Claude Code takes the repo's
+ * default branch, so every teammate installed whatever happened to be on `master` at the minute
+ * they cloned — including a commit pushed mid-refactor. `v1` is a tag that moves: it is force-moved
+ * onto each release, the way `actions/checkout@v5` does, so "the latest release" is a name that
+ * resolves rather than a number somebody has to look up.
+ *
+ * Claude Code has **no "latest tag" resolution** — `ref` must be a literal name — which is exactly
+ * why the moving name has to exist. Anyone who wants to freeze writes the immutable `v1.0.0` in
+ * their own settings instead; those tags are never moved.
+ */
+exports.MARKETPLACE = { name: 'ds', repo: 'tuna781/dspec', ref: 'v1' };
 /** `<plugin>@<marketplace>` — how `enabledPlugins` addresses one plugin. */
 exports.PLUGIN_ID = `ds@${exports.MARKETPLACE.name}`;
+/**
+ * Does this entry already point at our repo, whatever ref it names?
+ *
+ * The ref is the user's to choose — `v1` to follow releases, `v1.0.0` to stand still — so the only
+ * question asked here is whether the entry is aimed at dspec at all.
+ */
+function pinnedHere(entry) {
+    if (entry === null || typeof entry !== 'object')
+        return false;
+    const source = entry.source;
+    if (source === null || typeof source !== 'object')
+        return false;
+    return source.repo === exports.MARKETPLACE.repo;
+}
 /**
  * Add the dspec marketplace and enable the plugin, keeping everything else in the file.
  *
@@ -94,15 +120,22 @@ function declarePlugin(repo) {
     }
     const markets = { ...(settings.extraKnownMarketplaces ?? {}) };
     const plugins = { ...(settings.enabledPlugins ?? {}) };
-    const wantMarket = { source: { source: 'github', repo: exports.MARKETPLACE.repo } };
-    const marketSame = JSON.stringify(markets[exports.MARKETPLACE.name]) === JSON.stringify(wantMarket);
+    const wantMarket = { source: { source: 'github', repo: exports.MARKETPLACE.repo, ref: exports.MARKETPLACE.ref } };
+    // ⚠️ **An existing entry for this repo keeps the ref it already has.** Writing `v1` over it would
+    // drag anybody who deliberately pinned `v1.0.0` back onto the moving channel — silently, on a
+    // command they ran for an unrelated reason. A pin is a decision, and the same rule that protects
+    // an explicit `enabledPlugins: false` protects this. Only an absent entry, or one aimed at a
+    // different repo, is ours to write.
+    const marketSame = pinnedHere(markets[exports.MARKETPLACE.name])
+        || JSON.stringify(markets[exports.MARKETPLACE.name]) === JSON.stringify(wantMarket);
     // ⚠️ Only ADD the plugin, never flip it back to `true`. A `false` here is somebody deliberately
     // turning dspec off in this project; re-enabling it behind their back on the next `init` is
     // the kind of thing that gets a tool uninstalled.
     const pluginKnown = Object.prototype.hasOwnProperty.call(plugins, exports.PLUGIN_ID);
     if (marketSame && pluginKnown)
         return { ok: true, path: file, changed: false };
-    markets[exports.MARKETPLACE.name] = wantMarket;
+    if (!marketSame)
+        markets[exports.MARKETPLACE.name] = wantMarket;
     if (!pluginKnown)
         plugins[exports.PLUGIN_ID] = true;
     const next = { ...settings, extraKnownMarketplaces: markets, enabledPlugins: plugins };
@@ -110,18 +143,28 @@ function declarePlugin(repo) {
     fs.writeFileSync(file, JSON.stringify(next, null, 2) + '\n', 'utf-8');
     return { ok: true, path: file, changed: true };
 }
-/** What the project declares right now — read-only, for `doctor`. */
+/**
+ * What the project declares right now — read-only, for `doctor`.
+ *
+ * `ref` is read back rather than assumed, because the whole point is that the user may have chosen
+ * a different one. `null` means the entry names no ref at all, which is Claude Code's default
+ * branch — reported as such, never quietly rendered as `v1`.
+ */
 function readDeclaration(repo) {
     try {
         const s = JSON.parse(fs.readFileSync(path.join(repo, '.claude', 'settings.json'), 'utf-8'));
         const enabled = s.enabledPlugins?.[exports.PLUGIN_ID];
+        const entry = s.extraKnownMarketplaces?.[exports.MARKETPLACE.name];
+        const source = entry && typeof entry === 'object' ? entry.source : undefined;
+        const ref = source && typeof source === 'object' ? source.ref : undefined;
         return {
-            marketplace: Boolean(s.extraKnownMarketplaces?.[exports.MARKETPLACE.name]),
+            marketplace: Boolean(entry),
             enabled: enabled === undefined ? null : Boolean(enabled),
+            ref: typeof ref === 'string' ? ref : null,
         };
     }
     catch {
-        return { marketplace: false, enabled: null };
+        return { marketplace: false, enabled: null, ref: null };
     }
 }
 //# sourceMappingURL=project.js.map

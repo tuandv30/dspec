@@ -79,3 +79,41 @@ test('a second run touches nothing the user has edited', () => {
   runCli(dir, 'bootstrap', '--here', '--yes');
   assert.match(readIn(dir, '.ds/product.md'), /My own words/);
 });
+
+// ─── the release channel ────────────────────────────────────────────────────
+//
+// ⚠️ Users install from a REF, and which ref decides which code they run. Claude Code has no
+// "latest tag" resolution — a ref is a literal name — so `v1` is a tag that moves onto each
+// release. What these defend is that the default is that channel, and that a user who chose a
+// different ref keeps it.
+
+test('the declaration pins the release channel, not the default branch', () => {
+  const dir = makeRepo({ files: { 'src/a.ts': 'export const a = 1;\n' } });
+  runCli(dir, 'bootstrap', '--here', '--yes');
+
+  const source = JSON.parse(readIn(dir, '.claude/settings.json')).extraKnownMarketplaces.ds.source;
+  assert.strictEqual(source.repo, 'tuna781/dspec');
+  assert.strictEqual(source.ref, 'v1', 'no ref means whatever landed on master an hour ago');
+});
+
+test('a ref the user chose is NEVER overwritten', () => {
+  // Somebody who pinned v1.0.0 froze on purpose. Dragging them back onto the moving channel — on a
+  // command they ran for an unrelated reason — is the same betrayal as flipping `enabled` back on.
+  const dir = makeRepo({ files: { 'src/a.ts': 'export const a = 1;\n' } });
+  writeIn(dir, '.claude/settings.json', JSON.stringify({
+    extraKnownMarketplaces: { ds: { source: { source: 'github', repo: 'tuna781/dspec', ref: 'v1.0.0' } } },
+    enabledPlugins: { 'ds@ds': true },
+  }, null, 2));
+
+  runCli(dir, 'bootstrap', '--here', '--yes');
+
+  const source = JSON.parse(readIn(dir, '.claude/settings.json')).extraKnownMarketplaces.ds.source;
+  assert.strictEqual(source.ref, 'v1.0.0', 'a pin is a decision, and it stands');
+});
+
+test('`ds version` reports which ref is installed', () => {
+  // A frozen install nobody remembers freezing looks exactly like a broken update.
+  const dir = makeRepo({ files: { 'src/a.ts': 'export const a = 1;\n' } });
+  runCli(dir, 'bootstrap', '--here', '--yes');
+  assert.match(runCli(dir, 'version').stdout, /tuna781\/dspec@v1/);
+});

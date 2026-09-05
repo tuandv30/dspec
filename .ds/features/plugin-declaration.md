@@ -9,7 +9,7 @@ code:
 entry: declarePlugin
 uses: [Body vocabulary]
 tests: [test/ship/install.test.js]
-stamp: sha256f:7be40c57df0e42f6
+stamp: sha256f:3ed3de07a7f4a608
 ---
 
 Declares the plugin in the project's Claude Code settings, so a teammate who clones the repo gets
@@ -26,8 +26,19 @@ Rules
   different version from the CLI it calls.
 - **Existing files are never touched.** A second run tops up what is missing and leaves everything
   else exactly as the user left it.
+- **A ref the user chose is never overwritten.** An entry already aimed at this repo keeps whatever
+  ref it names. Somebody who pinned an immutable version froze deliberately, and dragging them back
+  onto the moving channel — on a command they ran for an unrelated reason — is the same betrayal as
+  flipping an explicit `false` back to `true`.
 
 Behaviour
+- The declaration pins a **release channel**, not the default branch: `ref: v1`, a tag force-moved
+  onto each release by `npm run release`. Without a ref every teammate installs whatever happened to
+  be on `master` when they cloned. Claude Code has no "latest tag" resolution — a ref is a literal
+  name — so a name that moves is the only way "latest" can be expressed at all.
+- `ds version` reports the ref actually declared, and reports its absence as the default branch
+  rather than rendering it as `v1`. A frozen install nobody remembers freezing looks exactly like a
+  broken update.
 - The manifest records which files the installer owns, so a later upgrade can tell what it may
   replace from what the user has since edited.
 - `.ds/` receives exactly four kinds and nothing else. A fifth file explaining the language would

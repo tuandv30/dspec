@@ -5,7 +5,7 @@ code: [src/cli/commands/version.ts]
 entry: cmdVersion
 uses: [Plugin declaration]
 tests: [test/ship/version.test.js]
-stamp: sha256f:1b6fb50ca3970d75
+stamp: sha256f:fc5e089bcf6f7b25
 ---
 
 Answers "which dspec is installed, and can it run?" — the version first, because that is the

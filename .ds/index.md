@@ -1,4 +1,4 @@
-<!-- ds: project=dspec generated=2026-09-05T12:00:36.254Z -->
+<!-- ds: project=dspec generated=2026-09-05T12:34:06.849Z -->
 # dspec — product index
 
 Every feature in this product: what it is, where it lives, and what it depends on.

@@ -3,7 +3,7 @@ name: Release
 area: Delivery
 code: [scripts/release.js, scripts/publish-release.js]
 uses: [Plugin build]
-stamp: sha256f:6150d440d85f9606
+stamp: sha256f:dd560b00f9ac2807
 ---
 
 Cuts a release: writes the version into every file that carries it, rebuilds the plugin, runs the
@@ -18,6 +18,10 @@ Rules
 - **A git tag and a published release are different objects.** Creating the tag does not announce
   anything, so a release that skips publication is shipping while the releases page still advertises
   an older version.
+- **The channel tag is the one tag that must move, and the version tags are the reason it can.**
+  `vMAJOR.MINOR.PATCH` is a record of what shipped, and moving it rewrites what somebody already
+  fetched; `vMAJOR` is a pointer to the current release, and a release that leaves it behind ships
+  to nobody. The opposite rules are deliberate.
 - **Release notes come from the changelog**, never from anything hand-written at publish time: a
   second account of one change starts identical and then drifts.
 - **Publication is a separate step**, because a release cannot be created for a tag the remote does
@@ -28,5 +32,9 @@ Rules
 Behaviour
 - Writing the version, rebuilding the plugin, running the suite, committing and tagging happen in
   that order, and the ordering is the point.
-- How users receive an update is unaffected by any of this: Claude Code reads the built plugin off
-  the default branch and compares its version. The releases page is for people.
+- The release moves `vMAJOR` onto the release commit, and that move is what ships: users declare
+  `ref: v1`, so landing a commit on `master` reaches nobody until the channel tag follows it.
+- The channel tag needs a force-push and the version tag never does, so the two are named as
+  separate commands rather than left to whoever is reading to work out.
+- The releases page is for people; Claude Code reads the built plugin off whatever ref the user
+  declared.

@@ -100,7 +100,7 @@ Everything is local: no server, no token, no network call, no telemetry, zero ru
 **Two steps, in this order.** Type both inside Claude Code:
 
 ```
-/plugin marketplace add tuna781/dspec     # 1. register the marketplace
+/plugin marketplace add tuna781/dspec@v1  # 1. register the marketplace, on the release channel
 /plugin install ds@ds                     # 2. install the plugin from it
 ```
 
@@ -109,6 +109,15 @@ Everything is local: no server, no token, no network call, no telemetry, zero ru
 > `<plugin>@<marketplace>` — the second `ds` names the marketplace, which does not exist until
 > step 1 registers it. Both halves really are called `ds`: the **repository** is `tuna781/dspec`,
 > the **marketplace** it publishes is named `ds`.
+
+**`@v1` is the release channel.** It is a tag that moves onto each release — the same thing
+`actions/checkout@v5` does — so you get the newest release rather than whatever happened to land on
+`master` an hour ago. Claude Code has no "latest tag" resolution, so the moving name is what makes
+"latest" expressible at all.
+
+To **freeze**, name an immutable tag instead — `tuna781/dspec@v1.0.0`. Those never move, and
+`/ds:bootstrap` will not drag you off one: an existing declaration keeps whatever ref it already
+names. Omit the ref entirely and you are back on `master`, which is the development branch.
 
 Then, in the repository you want modelled:
 
@@ -129,7 +138,7 @@ different version from the CLI it calls.
 ```jsonc
 // .claude/settings.json
 {
-  "extraKnownMarketplaces": { "ds": { "source": { "source": "github", "repo": "tuna781/dspec" } } },
+  "extraKnownMarketplaces": { "ds": { "source": { "source": "github", "repo": "tuna781/dspec", "ref": "v1" } } },
   "enabledPlugins": { "ds@ds": true }
 }
 ```
@@ -470,7 +479,7 @@ people to route around it rather than write the description.
 
 | Symptom | Usual cause | Fix |
 |---|---|---|
-| `/plugin install ds@ds` says **marketplace ds not found** | the marketplace was not added first | run `/plugin marketplace add tuna781/dspec`, then install |
+| `/plugin install ds@ds` says **marketplace ds not found** | the marketplace was not added first | run `/plugin marketplace add tuna781/dspec@v1`, then install |
 | Nothing happens at all — no hooks, `/ds:version` does nothing | Node is not on the PATH Claude Code starts processes with | install Node ≥ 20. A version manager (nvm, fnm, asdf) puts it on PATH via a shell startup file, so a spawned process can miss it even though your terminal finds it |
 | Commands and hooks do nothing | the plugin is not enabled in this project | `/ds:version` says which half is missing |
 | `bootstrap` says `settings.json` is unreadable | your JSON has a syntax error | fix it and re-run — dspec **will not** overwrite it |
@@ -512,11 +521,12 @@ checkout (fingerprint, staleness, coverage) · `src/compile/` lints and renders 
 command surface · `plugin/` is the **template** for the plugin and carries `__DS_*__` placeholders ·
 `dist-plugin/` is the built, committed, never-hand-edited copy.
 
-**Changes arrive as pull requests.** `master` is what users install from, so a commit landing there
-is a release to everybody, immediately. Open an issue first for anything larger than a fix, add a
-test, note user-visible changes in `CHANGELOG.md` under `## [Unreleased]`, and do not bump the
-version or tag — **the git tag is the version**, cut at release time by `npm run release <tag>` and
-published with `node scripts/publish-release.js <tag>`.
+**Changes arrive as pull requests.** Users install from the `v1` tag, not from `master`, so landing
+a commit is not yet shipping it — `npm run release` moves `v1` onto the new release, and that is the
+moment it reaches everybody. Open an issue first for anything larger than a fix, add a test, note
+user-visible changes in `CHANGELOG.md` under `## [Unreleased]`, and do not bump the version or tag —
+**the git tag is the version**, cut at release time by `npm run release <tag>` and published with
+`node scripts/publish-release.js <tag>`.
 
 **House style:** English only, everywhere. Comments explain the decision, not the syntax.
 

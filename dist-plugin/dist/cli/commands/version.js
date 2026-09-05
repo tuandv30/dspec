@@ -138,7 +138,11 @@ function cmdVersion(argv) {
         out.push({ level: 'info', label: 'plugin', detail: `\`${project_1.PLUGIN_ID}\` is declared but switched OFF in this project` });
     }
     else {
-        out.push({ level: 'ok', label: 'plugin', detail: `${project_1.PLUGIN_ID} · from ${project_1.MARKETPLACE.repo}` });
+        // The ref is reported because it is the difference between "I am on the release channel" and
+        // "I am frozen on a version" — and a frozen install that nobody remembers freezing looks
+        // exactly like a broken update.
+        const ref = decl.ref ?? '(default branch)';
+        out.push({ level: 'ok', label: 'plugin', detail: `${project_1.PLUGIN_ID} · from ${project_1.MARKETPLACE.repo}@${ref}` });
     }
     // ---- manifest --------------------------------------------------------
     //

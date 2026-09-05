@@ -3,7 +3,8 @@
     "ds": {
       "source": {
         "source": "github",
-        "repo": "tuna781/dspec"
+        "repo": "tuna781/dspec",
+        "ref": "v1"
       }
     }
   },
